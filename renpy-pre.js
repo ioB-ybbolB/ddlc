@@ -349,39 +349,48 @@ Module.preRun = Module.preRun || [ ];
     }
 
     async function loadGameZip() {
-
         try {
-            let response = await fetch(window.gameZipURL);
-
-            if (!response.ok) {
-                reportError("Could not load game.zip: " + response.status + " " + response.statusText);
-            }
-
-            gameZipSize = parseInt(response.headers.get('Content-Length'), 10);
-            if(Number.isNaN(gameZipSize)) gameZipSize = 0;
-
-            let reader = await response.body.getReader();
-
-            let f = FS.open('/game.zip', 'w');
-
-            while (true) {
-
-                let { done, value } = await reader.read();
-
-                if (done) {
-                    break;
+            const parts = [
+                'game.zip.part1',
+                'game.zip.part2',
+                'game.zip.part3',
+                'game.zip.part4'
+            ];
+    
+            const f = FS.open('/game.zip', 'w');
+    
+            try {
+                for (const part of parts) {
+                    const response = await fetch(part);
+    
+                    if (!response.ok) {
+                        throw new Error(
+                            `Failed to load ${part}: ${response.status} ${response.statusText}`
+                        );
+                    }
+    
+                    const reader = response.body.getReader();
+    
+                    while (true) {
+                        const { done, value } = await reader.read();
+    
+                        if (done) break;
+    
+                        FS.write(f, value, 0, value.length);
+                        gameZipDownloaded += value.length;
+                        updateDownloadProgress();
+                    }
                 }
-
-                FS.write(f, value, 0, value.length);
-                gameZipDownloaded += value.length;
-
-                updateDownloadProgress();
+            } finally {
+                FS.close(f);
             }
-
-            FS.close(f);
-
+    
+            gameZipSize = gameZipDownloaded;
+            updateDownloadProgress();
+    
         } catch (e) {
-            reportError("Could not download game.zip", e);
+            reportError("Could not download split game.zip", e);
+            throw e;
         }
     }
 
